@@ -1,23 +1,25 @@
 import threading
 from .httprequest import send_request
 
-def request(num, host, port, path, request_delay):
+def request(host, port, path, request_delay, method):
     try:
-        # print(f"Thread {num} is starting.")
-        result = send_request(host, port, path, request_delay)
-        # print(f"Thread {num} finished: {result[:50]}...")  # Print first 50 chars
+        result = send_request(host, port, path, request_delay, method)
+        # print(f"Request completed: {result[0]}")
     except Exception as e:
-        print(f"Thread {num} error: {e}")
+        print(f"Thread error: {e}")
 
-def numberConnection(num, host, port, path, request_delay):
+def numberConnection(num, host, port, path, request_delay, method):
     threads = []
     for i in range(num):
         thread = threading.Thread(
             target=request,
-            args=(i, host, port, path, request_delay),
+            args=(host, port, path, request_delay, method),
             daemon=True
         )
         thread.start()
         threads.append(thread)
     
-    # print(f"Launched {num} threads")
+    # for thread in threads:
+    #     thread.join()
+    
+    # print(f"All {num} threads completed")
