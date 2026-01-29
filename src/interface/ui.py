@@ -1,533 +1,365 @@
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
+from kivy.uix.spinner import Spinner
 from kivy.uix.button import Button
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.progressbar import ProgressBar
-from kivy.uix.popup import Popup
-from kivy.clock import Clock
 from kivy.core.window import Window
-from kivy.graphics import Color, Rectangle
-import threading
-import time
-import requests
-from datetime import datetime
-from urllib.parse import urlparse
-import queue
+from kivy.graphics import Color, RoundedRectangle, Rectangle
+from kivy.uix.widget import Widget
 
-class StressTestGUI(BoxLayout):
+class RocketUI(BoxLayout):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.orientation = 'vertical'
-        self.padding = 15
-        self.spacing = 10
+        super().__init__(orientation="vertical", padding=0, spacing=0, **kwargs)
         
-        # Set window properties
-        Window.size = (800, 700)
-        Window.clearcolor = (0.12, 0.12, 0.15, 1)
+        # Set background (dark black)
+        with self.canvas.before:
+            Color(0.05, 0.05, 0.05, 1)  # Deep black
+            self.bg_rect = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self.update_bg, size=self.update_bg)
+
+        # --- HEADER SECTION (Blue) ---
+        header_box = BoxLayout(orientation="vertical", size_hint_y=None, height=80, padding=[20, 15])
+        with header_box.canvas.before:
+            Color(0.1, 0.3, 0.6, 1)  # Deep blue
+            self.header_rect = Rectangle(pos=header_box.pos, size=header_box.size)
+        header_box.bind(pos=lambda instance, value: setattr(self.header_rect, 'pos', value),
+                       size=lambda instance, value: setattr(self.header_rect, 'size', value))
         
-        # Attack state variables
-        self.is_running = False
-        self.stop_flag = False
-        self.threads = []
-        self.request_count = 0
-        self.success_count = 0
-        self.failure_count = 0
-        self.log_queue = queue.Queue()
-        
-        # Build UI
-        self.build_ui()
-        
-        # Schedule log updates
-        Clock.schedule_interval(self.update_logs, 0.1)
-        
-        # Show warning on startup
-        Clock.schedule_once(lambda dt: self.show_warning(), 0.5)
-    
-    def build_ui(self):
-        # Title Section
-        title_box = BoxLayout(size_hint=(1, 0.08), padding=[5, 5])
-        with title_box.canvas.before:
-            Color(0.2, 0.25, 0.3, 1)
-            self.title_rect = Rectangle(pos=title_box.pos, size=title_box.size)
-        title_box.bind(pos=self.update_rect, size=self.update_rect)
-        
-        title = Label(
-            text='[b]Network Stress Testing Tool[/b]\n[size=12sp]Educational Use Only - Thesis Project[/size]',
-            markup=True,
-            font_size='22sp',
-            color=(1, 1, 1, 1)
+        header = Label(
+            text="ROCKET LAUNCHER",
+            font_size='32sp',
+            bold=True,
+            color=(1, 1, 1, 1)  # White text
         )
-        title_box.add_widget(title)
-        self.add_widget(title_box)
-        
-        # Warning Label
-        warning = Label(
-            text='⚠️ For authorized testing and educational purposes only ⚠️',
-            size_hint=(1, 0.05),
-            font_size='14sp',
-            color=(1, 0.3, 0.3, 1),
-            bold=True
-        )
-        self.add_widget(warning)
-        
-        # Input Section
-        input_section = GridLayout(
-            cols=2,
-            size_hint=(1, 0.25),
-            spacing=8,
-            padding=10
-        )
-        
-        with input_section.canvas.before:
-            Color(0.15, 0.15, 0.18, 1)
-            self.input_rect = Rectangle(pos=input_section.pos, size=input_section.size)
-        input_section.bind(pos=self.update_input_rect, size=self.update_input_rect)
+        header_box.add_widget(header)
+        self.add_widget(header_box)
+
+        # --- MAIN CONTENT AREA ---
+        main_container = BoxLayout(orientation="vertical", padding=25, spacing=15)
+        with main_container.canvas.before:
+            Color(0.15, 0.15, 0.18, 1)  # Dark gray background
+            self.main_rect = Rectangle(pos=main_container.pos, size=main_container.size)
+        main_container.bind(pos=lambda instance, value: setattr(self.main_rect, 'pos', value),
+                           size=lambda instance, value: setattr(self.main_rect, 'size', value))
+
+        # --- INPUT FIELDS SECTION ---
+        input_section = BoxLayout(orientation="vertical", size_hint_y=0.55, spacing=12)
         
         # URL Input
-        input_section.add_widget(self.create_label('Target URL:'))
-        self.url_input = TextInput(
-            hint_text='https://example.com',
-            multiline=False,
-            font_size='14sp',
-            background_color=(0.25, 0.25, 0.28, 1),
-            foreground_color=(1, 1, 1, 1),
-            cursor_color=(0.3, 0.7, 1, 1),
-            padding=[10, 10]
-        )
+        input_section.add_widget(self.create_label("Target URL"))
+        self.url_input = self.create_input("Enter URL")
         input_section.add_widget(self.url_input)
+
+        # Sleep Time
+        input_section.add_widget(self.create_label("Sleep Time (seconds)"))
+        self.sleep_input = self.create_input("5", input_filter="int")
+        input_section.add_widget(self.sleep_input)
+
+        # Number of Tasks
+        input_section.add_widget(self.create_label("Total Tasks"))
+        self.count_input = self.create_input("10", input_filter="int")
+        input_section.add_widget(self.count_input)
+
+        # Tasks per Sleep
+        input_section.add_widget(self.create_label("Tasks Per Sleep Cycle"))
+        self.tasks_per_sleep_input = self.create_input("1", input_filter="int")
+        input_section.add_widget(self.tasks_per_sleep_input)
+
+        # Method Selection
+        input_section.add_widget(self.create_label("Execution Method"))
+        self.method_spinner = self.create_spinner()
+        input_section.add_widget(self.method_spinner)
         
-        # Number of Threads
-        input_section.add_widget(self.create_label('Number of Threads:'))
-        self.threads_input = TextInput(
-            text='10',
-            multiline=False,
-            input_filter='int',
-            font_size='14sp',
-            background_color=(0.25, 0.25, 0.28, 1),
-            foreground_color=(1, 1, 1, 1),
-            cursor_color=(0.3, 0.7, 1, 1),
-            padding=[10, 10]
-        )
-        input_section.add_widget(self.threads_input)
+        main_container.add_widget(input_section)
+
+        # --- CONTROL BUTTONS ---
+        button_layout = BoxLayout(size_hint_y=None, height=60, spacing=15, padding=[0, 8, 0, 8])
         
-        # Attack Duration
-        input_section.add_widget(self.create_label('Attack Duration (seconds):'))
-        self.duration_input = TextInput(
-            text='5.0',
-            multiline=False,
-            input_filter='float',
-            font_size='14sp',
-            background_color=(0.25, 0.25, 0.28, 1),
-            foreground_color=(1, 1, 1, 1),
-            cursor_color=(0.3, 0.7, 1, 1),
-            padding=[10, 10]
-        )
-        input_section.add_widget(self.duration_input)
+        self.start_btn = self.create_button("START", (0.1, 0.5, 0.9, 1))  # Bright blue
+        self.start_btn.bind(on_press=self.on_start)
         
-        # Attacks Per Second
-        input_section.add_widget(self.create_label('Attacks Per Second:'))
-        self.attacks_per_sec_input = TextInput(
-            text='100',
-            multiline=False,
-            input_filter='int',
-            font_size='14sp',
-            background_color=(0.25, 0.25, 0.28, 1),
-            foreground_color=(1, 1, 1, 1),
-            cursor_color=(0.3, 0.7, 1, 1),
-            padding=[10, 10]
-        )
-        input_section.add_widget(self.attacks_per_sec_input)
+        self.stop_btn = self.create_button("STOP", (0.3, 0.3, 0.35, 1))  # Gray
+        self.stop_btn.bind(on_press=self.on_stop)
         
-        # Request Delay
-        input_section.add_widget(self.create_label('Request Delay (seconds):'))
-        self.delay_input = TextInput(
-            text='0.01',
-            multiline=False,
-            input_filter='float',
-            font_size='14sp',
-            background_color=(0.25, 0.25, 0.28, 1),
-            foreground_color=(1, 1, 1, 1),
-            cursor_color=(0.3, 0.7, 1, 1),
-            padding=[10, 10]
-        )
-        input_section.add_widget(self.delay_input)
+        button_layout.add_widget(self.start_btn)
+        button_layout.add_widget(self.stop_btn)
+        main_container.add_widget(button_layout)
+
+        # --- LOG SECTION (Larger, more space, fully scrollable) ---
+        log_container = BoxLayout(orientation="vertical", size_hint_y=0.45, padding=[0, 10, 0, 0], spacing=8)
         
-        self.add_widget(input_section)
-        
-        # Control Buttons
-        button_box = BoxLayout(size_hint=(1, 0.08), spacing=10, padding=10)
-        
-        self.start_btn = Button(
-            text='Start Attack',
-            font_size='16sp',
+        log_label_header = Label(
+            text="MISSION LOG",
+            font_size='18sp',
             bold=True,
-            background_color=(0.2, 0.7, 0.3, 1),
-            background_normal=''
-        )
-        self.start_btn.bind(on_press=self.confirm_start)
-        button_box.add_widget(self.start_btn)
-        
-        self.stop_btn = Button(
-            text='Stop Attack',
-            font_size='16sp',
-            bold=True,
-            background_color=(0.8, 0.2, 0.2, 1),
-            background_normal='',
-            disabled=True
-        )
-        self.stop_btn.bind(on_press=self.stop_attack)
-        button_box.add_widget(self.stop_btn)
-        
-        self.clear_btn = Button(
-            text='Clear Logs',
-            font_size='16sp',
-            background_color=(0.4, 0.4, 0.5, 1),
-            background_normal=''
-        )
-        self.clear_btn.bind(on_press=self.clear_logs)
-        button_box.add_widget(self.clear_btn)
-        
-        self.add_widget(button_box)
-        
-        # Status Section
-        status_box = BoxLayout(orientation='vertical', size_hint=(1, 0.15), padding=10, spacing=5)
-        
-        with status_box.canvas.before:
-            Color(0.15, 0.15, 0.18, 1)
-            self.status_rect = Rectangle(pos=status_box.pos, size=status_box.size)
-        status_box.bind(pos=self.update_status_rect, size=self.update_status_rect)
-        
-        self.status_label = Label(
-            text='Status: Idle',
-            font_size='16sp',
-            color=(0.3, 0.7, 1, 1),
-            bold=True,
-            size_hint=(1, 0.3)
-        )
-        status_box.add_widget(self.status_label)
-        
-        stats_grid = GridLayout(cols=3, size_hint=(1, 0.4), spacing=5)
-        
-        self.requests_label = Label(text='Requests: 0', font_size='14sp', color=(1, 1, 1, 1))
-        self.success_label = Label(text='Success: 0', font_size='14sp', color=(0.3, 1, 0.3, 1))
-        self.failure_label = Label(text='Failed: 0', font_size='14sp', color=(1, 0.3, 0.3, 1))
-        
-        stats_grid.add_widget(self.requests_label)
-        stats_grid.add_widget(self.success_label)
-        stats_grid.add_widget(self.failure_label)
-        
-        status_box.add_widget(stats_grid)
-        
-        self.progress_bar = ProgressBar(max=100, size_hint=(1, 0.3))
-        status_box.add_widget(self.progress_bar)
-        
-        self.add_widget(status_box)
-        
-        # Log Section
-        log_label = Label(
-            text='Activity Log:',
-            size_hint=(1, 0.04),
-            font_size='14sp',
-            color=(1, 1, 1, 1),
-            bold=True
-        )
-        self.add_widget(log_label)
-        
-        scroll = ScrollView(size_hint=(1, 0.4))
-        self.log_display = Label(
-            text='',
             size_hint_y=None,
-            font_size='12sp',
-            color=(0.8, 0.8, 0.8, 1),
-            markup=True,
-            halign='left',
-            valign='top'
+            height=35,
+            color=(1, 1, 1, 1)  # White text
         )
-        self.log_display.bind(texture_size=self.log_display.setter('size'))
-        self.log_display.bind(size=self.update_log_text_size)
-        scroll.add_widget(self.log_display)
-        self.add_widget(scroll)
-    
-    def update_rect(self, instance, value):
-        self.title_rect.pos = instance.pos
-        self.title_rect.size = instance.size
-    
-    def update_input_rect(self, instance, value):
-        self.input_rect.pos = instance.pos
-        self.input_rect.size = instance.size
-    
-    def update_status_rect(self, instance, value):
-        self.status_rect.pos = instance.pos
-        self.status_rect.size = instance.size
-    
-    def update_log_text_size(self, instance, value):
-        instance.text_size = (instance.width - 20, None)
-    
+        log_container.add_widget(log_label_header)
+        
+        # Scrollable log area
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width=10)
+        with scroll.canvas.before:
+            Color(0.08, 0.08, 0.1, 1)  # Dark background for log
+            self.scroll_rect = RoundedRectangle(pos=scroll.pos, size=scroll.size, radius=[10])
+        scroll.bind(pos=lambda instance, value: setattr(self.scroll_rect, 'pos', value),
+                   size=lambda instance, value: setattr(self.scroll_rect, 'size', value))
+        
+        # Container for log content
+        self.scroll_layout = BoxLayout(orientation="vertical", size_hint_y=None, padding=15, spacing=5)
+        self.scroll_layout.bind(minimum_height=self.scroll_layout.setter('height'))
+
+        self.log_label = Label(
+            text="Awaiting launch sequence...",
+            size_hint_y=None,
+            valign="top",
+            halign="left",
+            color=(1, 1, 1, 1),  # White text
+            font_size='14sp',
+            markup=True
+        )
+        self.log_label.bind(texture_size=self.update_label_height, size=self.update_text_size)
+        self.scroll_layout.add_widget(self.log_label)
+        
+        scroll.add_widget(self.scroll_layout)
+        log_container.add_widget(scroll)
+        
+        main_container.add_widget(log_container)
+        self.add_widget(main_container)
+
     def create_label(self, text):
+        """Create a simple white text label"""
         return Label(
             text=text,
             font_size='14sp',
-            color=(1, 1, 1, 1),
-            halign='right',
-            size_hint_x=0.4
+            bold=True,
+            size_hint_y=None,
+            height=25,
+            halign="left",
+            color=(1, 1, 1, 1)  # White text
         )
-    
-    def show_warning(self):
-        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        content.add_widget(Label(
-            text='⚠️ WARNING ⚠️\n\nThis tool is for AUTHORIZED TESTING ONLY.\n\n'
-                 'Unauthorized use against systems you do not own\n'
-                 'or have explicit permission to test is ILLEGAL.\n\n'
-                 'Use responsibly and ethically.',
-            font_size='14sp',
-            halign='center'
-        ))
-        
-        btn = Button(text='I Understand', size_hint=(1, 0.2))
-        content.add_widget(btn)
-        
-        popup = Popup(
-            title='Legal Warning',
-            content=content,
-            size_hint=(0.6, 0.5),
-            auto_dismiss=False
+
+    def create_input(self, hint, input_filter=None):
+        """Create a simple gray input field with white text, no borders or shadows"""
+        text_input = TextInput(
+            hint_text=hint,
+            multiline=False,
+            size_hint_y=None,
+            height=42,
+            padding=[15, 11],
+            font_size='15sp',
+            background_color=(0.25, 0.25, 0.28, 1),  # Simple gray background
+            foreground_color=(1, 1, 1, 1),  # White text
+            cursor_color=(0.1, 0.5, 0.9, 1),  # Blue cursor
+            input_filter=input_filter,
+            background_normal='',  # Remove default background
+            background_active=''   # Remove default active background
         )
-        btn.bind(on_press=popup.dismiss)
-        popup.open()
-    
-    def confirm_start(self, instance):
-        if not self.validate_inputs():
-            return
-        
-        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        content.add_widget(Label(
-            text=f'Start stress test on:\n{self.url_input.text}\n\nAre you authorized to test this target?',
-            font_size='14sp',
-            halign='center'
-        ))
-        
-        btn_box = BoxLayout(size_hint=(1, 0.3), spacing=10)
-        yes_btn = Button(text='Yes, Start', background_color=(0.2, 0.7, 0.3, 1))
-        no_btn = Button(text='Cancel', background_color=(0.8, 0.2, 0.2, 1))
-        
-        btn_box.add_widget(yes_btn)
-        btn_box.add_widget(no_btn)
-        content.add_widget(btn_box)
-        
-        popup = Popup(
-            title='Confirm Attack',
-            content=content,
-            size_hint=(0.6, 0.4),
-            auto_dismiss=False
+        return text_input
+
+    def create_spinner(self):
+        """Create a simple gray dropdown with white text, no borders or shadows"""
+        spinner = Spinner(
+            text="Computer",
+            values=("Hand", "Computer"),
+            size_hint_y=None,
+            height=42,
+            background_color=(0.25, 0.25, 0.28, 1),  # Simple gray background
+            color=(1, 1, 1, 1),  # White text
+            font_size='15sp',
+            background_normal='',
+            background_down=''
         )
-        
-        yes_btn.bind(on_press=lambda x: (popup.dismiss(), self.start_attack(None)))
-        no_btn.bind(on_press=popup.dismiss)
-        popup.open()
-    
-    def validate_inputs(self):
-        # Validate URL
-        url = self.url_input.text.strip()
-        if not url:
-            self.show_error('Please enter a target URL')
-            return False
-        
-        try:
-            result = urlparse(url)
-            if not all([result.scheme, result.netloc]):
-                raise ValueError()
-        except:
-            self.show_error('Invalid URL format')
-            return False
-        
-        # Validate numeric inputs
-        try:
-            threads = int(self.threads_input.text)
-            if threads <= 0 or threads > 1000:
-                raise ValueError()
-        except:
-            self.show_error('Threads must be between 1 and 1000')
-            return False
-        
-        try:
-            duration = float(self.duration_input.text)
-            if duration <= 0:
-                raise ValueError()
-        except:
-            self.show_error('Duration must be greater than 0')
-            return False
-        
-        try:
-            attacks = int(self.attacks_per_sec_input.text)
-            if attacks <= 0:
-                raise ValueError()
-        except:
-            self.show_error('Attacks per second must be greater than 0')
-            return False
-        
-        try:
-            delay = float(self.delay_input.text)
-            if delay < 0:
-                raise ValueError()
-        except:
-            self.show_error('Request delay must be 0 or greater')
-            return False
-        
-        return True
-    
-    def show_error(self, message):
-        popup = Popup(
-            title='Validation Error',
-            content=Label(text=message),
-            size_hint=(0.5, 0.3)
+        return spinner
+
+    def create_button(self, text, color):
+        """Create a button with rounded corners"""
+        button = Button(
+            text=text,
+            size_hint_y=None,
+            height=55,
+            font_size='18sp',
+            bold=True,
+            background_color=(0, 0, 0, 0),  # Transparent to use canvas
+            color=(1, 1, 1, 1)  # White text
         )
-        popup.open()
-    
-    def start_attack(self, instance):
-        self.is_running = True
-        self.stop_flag = False
-        self.request_count = 0
-        self.success_count = 0
-        self.failure_count = 0
-        
-        # Update UI
-        self.start_btn.disabled = True
-        self.stop_btn.disabled = False
-        self.url_input.disabled = True
-        self.threads_input.disabled = True
-        self.duration_input.disabled = True
-        self.attacks_per_sec_input.disabled = True
-        self.delay_input.disabled = True
-        
-        self.status_label.text = 'Status: Running'
-        self.status_label.color = (0.3, 1, 0.3, 1)
-        
-        self.log_message('[b][color=00ff00]Attack started[/color][/b]')
-        
-        # Get parameters
-        url = self.url_input.text.strip()
-        num_threads = int(self.threads_input.text)
-        duration = float(self.duration_input.text)
-        attacks_per_sec = int(self.attacks_per_sec_input.text)
-        delay = float(self.delay_input.text)
-        
-        # Start attack threads
-        self.threads = []
-        for i in range(num_threads):
-            thread = threading.Thread(
-                target=self.attack_worker,
-                args=(url, duration, attacks_per_sec, delay, i+1)
+        with button.canvas.before:
+            Color(*color)
+            button.bg_rect = RoundedRectangle(
+                pos=button.pos,
+                size=button.size,
+                radius=[12]
             )
-            thread.daemon = True
-            thread.start()
-            self.threads.append(thread)
+        button.bind(
+            pos=lambda instance, value: setattr(instance.bg_rect, 'pos', value),
+            size=lambda instance, value: setattr(instance.bg_rect, 'size', value)
+        )
+        return button
+
+    def update_bg(self, instance, value):
+        self.bg_rect.pos = self.pos
+        self.bg_rect.size = self.size
+
+    def update_label_height(self, instance, value):
+        instance.height = instance.texture_size[1]
+
+    def update_text_size(self, instance, value):
+        instance.text_size = (instance.width - 20, None)
+
+    # ==========================================
+    # BACKEND INTEGRATION POINT #1: START BUTTON
+    # ==========================================
+    def on_start(self, instance):
+        """
+        Called when the START button is pressed.
+        This is where you initialize and start your backend process.
+        """
+        # Collect all input data
+        data = {
+            "url": self.url_input.text,
+            "sleep_time": self.sleep_input.text,
+            "task_count": self.count_input.text,
+            "tasks_per_sleep": self.tasks_per_sleep_input.text,
+            "method": self.method_spinner.text
+        }
         
-        # Start progress tracker
-        Clock.schedule_once(lambda dt: self.track_progress(duration), 0)
-    
-    def attack_worker(self, url, duration, attacks_per_sec, delay, thread_id):
-        start_time = time.time()
-        request_interval = 1.0 / attacks_per_sec if attacks_per_sec > 0 else 0
-        
-        while time.time() - start_time < duration and not self.stop_flag:
-            try:
-                response = requests.get(url, timeout=5)
-                self.request_count += 1
-                
-                if response.status_code == 200:
-                    self.success_count += 1
-                else:
-                    self.failure_count += 1
-                    
-            except Exception as e:
-                self.request_count += 1
-                self.failure_count += 1
-            
-            time.sleep(max(delay, request_interval))
-        
-        self.log_message(f'Thread {thread_id} completed')
-    
-    def track_progress(self, duration):
-        if not self.is_running:
+        # Validation
+        if not self.url_input.text:
+            self.update_log("ERROR: Target URL is required!")
             return
         
-        start_time = time.time()
+        if not self.sleep_input.text or not self.count_input.text:
+            self.update_log("ERROR: Sleep time and task count are required!")
+            return
+
+        # ==========================================
+        # 🔹 CALL YOUR BACKEND HERE 🔹
+        # ==========================================
+        # Option 1: Direct function call (if backend is in same file)
+        # self.start_backend_process(data)
         
-        def update_progress(dt):
-            elapsed = time.time() - start_time
-            progress = min((elapsed / duration) * 100, 100)
-            self.progress_bar.value = progress
+        # Option 2: Import and call from another module
+        # from your_backend import start_tasks
+        # start_tasks(data, callback=self.update_log)
+        
+        # Option 3: Using threading (recommended for long-running tasks)
+        # import threading
+        # self.backend_thread = threading.Thread(
+        #     target=self.run_backend_tasks, 
+        #     args=(data,),
+        #     daemon=True
+        # )
+        # self.backend_thread.start()
+        
+        # Option 4: Using Kivy Clock for periodic tasks
+        # from kivy.clock import Clock
+        # self.task_event = Clock.schedule_interval(
+        #     lambda dt: self.process_task(data), 
+        #     int(data['sleep_time'])
+        # )
+        
+        self.update_log(f"LAUNCH INITIATED")
+        self.update_log(f"Configuration: {data}")
+
+    # ==========================================
+    # BACKEND INTEGRATION POINT #2: STOP BUTTON
+    # ==========================================
+    def on_stop(self, instance):
+        """
+        Called when the STOP button is pressed.
+        This is where you stop/cancel your backend process.
+        """
+        # ==========================================
+        # 🔹 STOP YOUR BACKEND HERE 🔹
+        # ==========================================
+        # Option 1: Set a stop flag
+        # self.stop_flag = True
+        
+        # Option 2: Cancel scheduled events
+        # if hasattr(self, 'task_event'):
+        #     self.task_event.cancel()
+        
+        # Option 3: Call backend stop function
+        # from your_backend import stop_tasks
+        # stop_tasks()
+        
+        # Option 4: Wait for thread to finish (if using threading)
+        # if hasattr(self, 'backend_thread') and self.backend_thread.is_alive():
+        #     self.stop_flag = True
+        #     self.backend_thread.join(timeout=5)
+        
+        self.update_log("MISSION ABORTED")
+
+    # ==========================================
+    # BACKEND INTEGRATION POINT #3: LOG UPDATES
+    # ==========================================
+    def update_log(self, message):
+        """
+        Call this method to update the mission log display.
+        
+        ⚠️ IMPORTANT: If calling from a background thread, use Clock.schedule_once:
+        
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: ui_instance.update_log("Message"), 0)
+        
+        Args:
+            message (str): The log message to display
+        """
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        self.log_label.text += f"\n[{timestamp}] {message}"
+
+    # ==========================================
+    # EXAMPLE BACKEND INTEGRATION METHODS
+    # ==========================================
+    
+    def run_backend_tasks(self, data):
+        """
+        Example method showing how to run backend tasks in a thread.
+        Replace this with your actual backend logic.
+        """
+        from kivy.clock import Clock
+        import time
+        
+        self.stop_flag = False
+        task_count = int(data['task_count'])
+        sleep_time = int(data['sleep_time'])
+        tasks_per_sleep = int(data['tasks_per_sleep'])
+        
+        for i in range(task_count):
+            if self.stop_flag:
+                Clock.schedule_once(
+                    lambda dt: self.update_log("Tasks stopped by user"), 0
+                )
+                break
             
-            if elapsed >= duration or self.stop_flag:
-                self.finish_attack()
-            elif self.is_running:
-                Clock.schedule_once(update_progress, 0.1)
+            # Your actual task logic here
+            # Example: make API call, process data, etc.
+            
+            Clock.schedule_once(
+                lambda dt, num=i+1: self.update_log(f"Task {num}/{task_count} completed"), 0
+            )
+            
+            if (i + 1) % tasks_per_sleep == 0:
+                Clock.schedule_once(
+                    lambda dt, s=sleep_time: self.update_log(f"Sleeping for {s} seconds..."), 0
+                )
+                time.sleep(sleep_time)
         
-        Clock.schedule_once(update_progress, 0.1)
-    
-    def stop_attack(self, instance):
-        self.stop_flag = True
-        self.log_message('[b][color=ff6600]Stopping attack...[/color][/b]')
-        self.status_label.text = 'Status: Stopping...'
-        self.status_label.color = (1, 0.6, 0, 1)
-    
-    def finish_attack(self):
-        self.is_running = False
-        self.stop_flag = True
-        
-        # Wait for threads to finish
-        for thread in self.threads:
-            thread.join(timeout=1)
-        
-        # Update UI
-        self.start_btn.disabled = False
-        self.stop_btn.disabled = True
-        self.url_input.disabled = False
-        self.threads_input.disabled = False
-        self.duration_input.disabled = False
-        self.attacks_per_sec_input.disabled = False
-        self.delay_input.disabled = False
-        
-        self.status_label.text = 'Status: Completed'
-        self.status_label.color = (0.3, 0.7, 1, 1)
-        self.progress_bar.value = 100
-        
-        self.log_message('[b][color=00ffff]Attack completed[/color][/b]')
-        self.log_message(f'Total Requests: {self.request_count}, Success: {self.success_count}, Failed: {self.failure_count}')
-    
-    def update_logs(self, dt):
-        # Update statistics
-        self.requests_label.text = f'Requests: {self.request_count}'
-        self.success_label.text = f'Success: {self.success_count}'
-        self.failure_label.text = f'Failed: {self.failure_count}'
-        
-        # Update log display
-        while not self.log_queue.empty():
-            try:
-                message = self.log_queue.get_nowait()
-                current_text = self.log_display.text
-                self.log_display.text = message + '\n' + current_text
-            except:
-                pass
-    
-    def log_message(self, message):
-        timestamp = datetime.now().strftime('%H:%M:%S')
-        log_entry = f'[{timestamp}] {message}'
-        self.log_queue.put(log_entry)
-    
-    def clear_logs(self, instance):
-        self.log_display.text = ''
-        self.log_message('[color=ffff00]Logs cleared[/color]')
+        Clock.schedule_once(
+            lambda dt: self.update_log("All tasks completed!"), 0
+        )
 
 
-class StressTestApp(App):
+class RocketApp(App):
     def build(self):
-        self.title = 'Network Stress Testing Tool'
-        return StressTestGUI()
+        Window.clearcolor = (0.05, 0.05, 0.05, 1)  # Match background
+        Window.size = (1500, 1000)  # Increased height for better log visibility
+        return RocketUI()
 
 
-if __name__ == '__main__':
-    StressTestApp().run()
+if __name__ == "__main__":
+    RocketApp().run()
